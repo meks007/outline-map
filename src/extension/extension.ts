@@ -41,6 +41,8 @@ export function activate(context: ExtensionContext) {
 		initialSearch: context.globalState.get('searchField', false),
 	});
 
+	const diagnosticReadyDisposable = registerDiagnosticReadyEvent(outlineView);
+
 	context.subscriptions.push(
 		window.registerWebviewViewProvider('outline-map-view', outlineView),
 		registerDocumentSwitchEvent(outlineView),
@@ -48,6 +50,7 @@ export function activate(context: ExtensionContext) {
 		registerScrollEvent(outlineView),
 		registerEditEvent(outlineView),
 		registerDiagnosticEvent(outlineView),
+		diagnosticReadyDisposable,
 		...OutlineViewCommandList.map(command => commands.registerCommand(command.name, command.fn.bind(null, outlineView, context.globalState))),
 		...WorkspaceCommandList.map(command => commands.registerCommand(command.name, command.fn.bind(null, workspaceSymbols))),
 		...ContextCommandList.map(command => commands.registerCommand(command.name, command.fn.bind(null))),
@@ -187,4 +190,32 @@ function registerDiagnosticEvent(outlineView: OutlineView) {
 		const diagnostics = languages.getDiagnostics(docUri);
 		outlineView.updateDiagnostics(diagnostics);
 	}, 300));
+}
+
+/**
+ * One-shot listener that calls update() the first time a diagnostics event
+ * arrives for the active document after the webview is initialized.
+ *
+ * updateDiagnostics() returns early when outlineTree is undefined, so it
+ * cannot recover an empty outline on startup. This listener fills that gap:
+ * language servers fire onDidChangeDiagnostics (even for zero diagnostics)
+ * after their initial analysis pass, which is the earliest point at which
+ * vscode.executeDocumentSymbolProvider returns real results.
+ *
+ * The disposable is added to context.subscriptions so it is cleaned up
+ * automatically if it has not already fired before the extension deactivates.
+ * @param outlineView 
+ * @returns 
+ */
+function registerDiagnosticReadyEvent(outlineView: OutlineView) {
+	const disposable = languages.onDidChangeDiagnostics((event: DiagnosticChangeEvent) => {
+		const activeUri = window.activeTextEditor?.document.uri;
+		if (!activeUri) return;
+		const affected = event.uris.some(uri => uri.toString() === activeUri.toString());
+		if (affected) {
+			outlineView.update(window.activeTextEditor?.document);
+			disposable.dispose();
+		}
+	});
+	return disposable;
 }
