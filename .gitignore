@@ -5,3 +5,4 @@ node_modules
 *.vsix
 vsc-extension-quickstart.md
 .vscode-test-web/**
+pnpm-workspace.yaml
