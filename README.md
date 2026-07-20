@@ -1,3 +1,5 @@
+Build local VSIX with -- pnpm dlx @vscode/vsce package --no-dependencies
+
 # Outline Map
 
 EN | [中文](README_ZH_CN.md)
