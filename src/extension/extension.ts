@@ -41,8 +41,6 @@ export function activate(context: ExtensionContext) {
 		initialSearch: context.globalState.get('searchField', false),
 	});
 
-	const diagnosticReadyDisposable = registerDiagnosticReadyEvent(outlineView);
-
 	context.subscriptions.push(
 		window.registerWebviewViewProvider('outline-map-view', outlineView),
 		registerDocumentSwitchEvent(outlineView),
@@ -50,7 +48,7 @@ export function activate(context: ExtensionContext) {
 		registerScrollEvent(outlineView),
 		registerEditEvent(outlineView),
 		registerDiagnosticEvent(outlineView),
-		diagnosticReadyDisposable,
+		registerDiagnosticReadyEvent(outlineView),
 		...OutlineViewCommandList.map(command => commands.registerCommand(command.name, command.fn.bind(null, outlineView, context.globalState))),
 		...WorkspaceCommandList.map(command => commands.registerCommand(command.name, command.fn.bind(null, workspaceSymbols))),
 		...ContextCommandList.map(command => commands.registerCommand(command.name, command.fn.bind(null))),
@@ -193,29 +191,31 @@ function registerDiagnosticEvent(outlineView: OutlineView) {
 }
 
 /**
- * One-shot listener that calls update() the first time a diagnostics event
- * arrives for the active document after the webview is initialized.
+ * Calls update() when a diagnostics event arrives for the active document
+ * and the outline is not yet populated.
  *
  * updateDiagnostics() returns early when outlineTree is undefined, so it
- * cannot recover an empty outline on startup. This listener fills that gap:
- * language servers fire onDidChangeDiagnostics (even for zero diagnostics)
- * after their initial analysis pass, which is the earliest point at which
- * vscode.executeDocumentSymbolProvider returns real results.
+ * cannot recover an empty outline on startup or after opening a file whose
+ * language server was not yet ready. This listener fills that gap.
  *
- * The disposable is added to context.subscriptions so it is cleaned up
- * automatically if it has not already fired before the extension deactivates.
+ * Language servers fire onDidChangeDiagnostics (even for zero diagnostics)
+ * after their initial analysis pass, which is the earliest point at which
+ * vscode.executeDocumentSymbolProvider returns real results. The listener
+ * stays alive for the extension lifetime so it covers every new language
+ * opened in the workbench, not only the first one.
+ *
+ * The hasOutline() guard prevents redundant update() calls for documents
+ * whose symbols are already loaded.
  * @param outlineView 
  * @returns 
  */
 function registerDiagnosticReadyEvent(outlineView: OutlineView) {
-	const disposable = languages.onDidChangeDiagnostics((event: DiagnosticChangeEvent) => {
+	return languages.onDidChangeDiagnostics((event: DiagnosticChangeEvent) => {
 		const activeUri = window.activeTextEditor?.document.uri;
 		if (!activeUri) return;
 		const affected = event.uris.some(uri => uri.toString() === activeUri.toString());
-		if (affected) {
+		if (affected && !outlineView.hasOutline()) {
 			outlineView.update(window.activeTextEditor?.document);
-			disposable.dispose();
 		}
 	});
-	return disposable;
 }
