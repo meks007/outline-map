@@ -56,6 +56,15 @@ export class OutlineView implements WebviewViewProvider {
 		this.sortby = init.sortBy || Sortby.position;
 	}
 
+	/**
+	 * Returns true when the outline tree has been populated for the current
+	 * document. Used by registerDiagnosticReadyEvent to avoid redundant
+	 * update() calls when symbols are already loaded.
+	 */
+	hasOutline(): boolean {
+		return this.outlineTree !== undefined;
+	}
+
 	pin(pinStatus: PinStatus) {
 		this.pinStatus = pinStatus;
 	}
@@ -468,7 +477,7 @@ export class OutlineView implements WebviewViewProvider {
 		this.outlineTree = undefined;
 		this.inView.clear();
 		this.focusing.clear();
-		this.prevSelections = [];
+		this.prevSelections = [];;
 		this.postMessage({
 			type: 'clear',
 			data: {
